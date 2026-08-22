@@ -2064,27 +2064,27 @@ function mountSettings(){
   });
 }
 
-function wireEvents(){
-  var ev = ctx().eventSource, et = ctx().event_types;
+function boot(){
+  mountSettings();
 
-  ev.on(et.APP_READY, function(){
-    mountSettings();
-    root = document.createElement('div');
-    root.id = ROOT_ID;
-    document.body.appendChild(root);
-    loadDB(function(){
-      if (!alive()) return;
-      resolveCK();
-      tick();
-      render();
-      if (syncOn()) { cloudPull(); return; }
-      var savedNick = lsGet(NICK_KEY) || '';
-      if (savedNick && !syncOn()) {
-        sync().nick = savedNick; persist();
-        cloudPull(function(ok){ if (ok) { tick(); render(); } });
-      }
-    });
+  root = document.createElement('div');
+  root.id = ROOT_ID;
+  document.body.appendChild(root);
+
+  loadDB(function(){
+    if (!alive()) return;
+    resolveCK();
+    tick();
+    render();
+    if (syncOn()) { cloudPull(); return; }
+    var savedNick = lsGet(NICK_KEY) || '';
+    if (savedNick && !syncOn()) {
+      sync().nick = savedNick; persist();
+      cloudPull(function(ok){ if (ok) { tick(); render(); } });
+    }
   });
+
+  var ev = ctx().eventSource, et = ctx().event_types;
 
   ev.on(et.CHAT_CHANGED, function(){
     if (alive() && loaded) resolveCK();
@@ -2121,7 +2121,7 @@ function wireEvents(){
 }
 
 jQuery(function(){
-  try { wireEvents(); console.log('[PUSYA PET] v2.4 loaded'); }
+  try { boot(); console.log('[PUSYA PET] v2.4 loaded'); }
   catch(e){ console.error('[PUSYA PET] init failed', e); }
 });
 
