@@ -1,14 +1,7 @@
-import { getContext, extension_settings, setExtensionPrompt, saveSettingsDebounced } from "../../../extensions.js";
-import { eventSource, event_types, generateQuietPrompt } from "../../../../script.js";
-
+(function(){
 'use strict';
 
-/* ═══════════════════════════════════════════════════════════
-   PUSYA PET v2.4 — тамагочи для ролеплея (SillyTavern)
-   Порт движка из Таво. Питомец живёт по реальному времени:
-   статы пересчитываются от меток времени, а не от тиков таймера.
-   Облако — общее с Таво-версией (pusyapet.vercel.app).
-   ═══════════════════════════════════════════════════════════ */
+function ctx(){ return SillyTavern.getContext(); }
 
 var _alive = true;
 function alive(){ return _alive; }
@@ -300,7 +293,7 @@ function cfg(){ return DB.cfg; }
 
 /* ═══ НАСТРОЙКИ РАСШИРЕНИЯ (SillyTavern) ═══ */
 function host(){
-  var c = extension_settings.pusya_pet || {};
+  var c = ((ctx().extensionSettings || {}).pusya_pet) || {};
   return {
     inject: c.inject !== false,
     watcher: c.watcher !== false,
@@ -876,7 +869,9 @@ function modelAsk(prompt, sys){
 }
 function genText(prompt, sys){
   if (modelReady()) return modelAsk(prompt, sys).then(stripReasoning);
-  return generateQuietPrompt(sys + '\n\n---\n\n' + prompt).then(function(r){
+  var c = ctx();
+  if (typeof c.generateRaw !== 'function') return Promise.reject(new Error('обнови SillyTavern или настрой свою модель'));
+  return c.generateRaw(prompt, null, false, false, sys, true).then(function(r){
     var t = stripReasoning(String(r || ''));
     if (!t) throw new Error('модель не вернула ответ');
     return t;
@@ -885,7 +880,7 @@ function genText(prompt, sys){
 
 function recent(n){
   try {
-    var chat = getContext().chat;
+    var chat = ctx().chat;
     if (!chat || !chat.length) return Promise.resolve([]);
     var tail = chat.slice(-n);
     var result = tail.map(function(m, i){
@@ -1155,7 +1150,7 @@ function pushCtx(){
       if ((freshNow(list[i]) && !list[i].now.sent) || freshPend(list[i]).length) { news = true; break; }
     if (!news && (msgSince % h.every) !== 0) on = false;
   }
-  setExtensionPrompt('pusya_pet', on ? buildCtx() : '', 1, 4);
+  ctx().setExtensionPrompt('pusya_pet', on ? buildCtx() : '', 1, 4);
 }
 
 /* ═══ ОФОРМЛЕНИЕ ════════════════════════════════════════════ */
@@ -2003,7 +1998,10 @@ function setCK(key){
 }
 function resolveCK(){
   var chatId = null;
-  try { chatId = getContext().chatId; } catch(e){}
+  try {
+    var c = ctx();
+    chatId = (typeof c.getCurrentChatId === 'function' ? c.getCurrentChatId() : null) || c.chatId;
+  } catch(e){}
   setCK(chatId ? ('c' + chatId) : 'default');
 }
 
@@ -2025,72 +2023,87 @@ function onMsg(){
 }
 
 /* ═══ ИНИЦИАЛИЗАЦИЯ (SillyTavern) ═══ */
-jQuery(async () => {
-  var settingsHtml = `
-  <div id="pusya_pet_settings">
-    <div class="inline-drawer">
-      <div class="inline-drawer-toggle inline-drawer-header">
-        <b>🐾 PUSYA PET</b>
-        <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-      </div>
-      <div class="inline-drawer-content">
-        <label>
-          <input type="checkbox" id="pp_st_inject">
-          Вставлять питомца в промпт
-        </label>
-        <label>
-          <input type="checkbox" id="pp_st_watcher">
-          Наблюдатель (модель смотрит сцену)
-        </label>
-        <label>
-          Частота
-          <select id="pp_st_every">
-            <option value="1">каждое сообщ.</option>
-            <option value="3">каждое 3-е</option>
-            <option value="5">каждое 5-е</option>
-            <option value="8">каждое 8-е</option>
-          </select>
-        </label>
-      </div>
-    </div>
-  </div>`;
+function mountSettings(){
+  if ($('#pusya_pet_settings').length) return;
+  var target = $('#extensions_settings2').length ? '#extensions_settings2' : '#extensions_settings';
+  if (!$(target).length) return;
 
-  $('#extensions_settings2').append(settingsHtml);
+  var settingsHtml = '<div id="pusya_pet_settings">' +
+    '<div class="inline-drawer">' +
+    '<div class="inline-drawer-toggle inline-drawer-header">' +
+    '<b>🐾 PUSYA PET</b>' +
+    '<div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div></div>' +
+    '<div class="inline-drawer-content">' +
+    '<label><input type="checkbox" id="pp_st_inject"> Вставлять питомца в промпт</label>' +
+    '<label><input type="checkbox" id="pp_st_watcher"> Наблюдатель (модель смотрит сцену)</label>' +
+    '<label>Частота <select id="pp_st_every">' +
+    '<option value="1">каждое сообщ.</option><option value="3">каждое 3-е</option>' +
+    '<option value="5">каждое 5-е</option><option value="8">каждое 8-е</option>' +
+    '</select></label></div></div></div>';
 
-  if (!extension_settings.pusya_pet) extension_settings.pusya_pet = {};
-  var s = extension_settings.pusya_pet;
+  $(target).append(settingsHtml);
+
+  var es = ctx().extensionSettings;
+  if (!es.pusya_pet) es.pusya_pet = {};
+  var s = es.pusya_pet;
   if (s.inject === undefined) s.inject = true;
   if (s.watcher === undefined) s.watcher = true;
   if (s.every === undefined) s.every = 5;
 
   $('#pp_st_inject').prop('checked', s.inject).on('change', function(){
     s.inject = $(this).is(':checked');
-    saveSettingsDebounced();
+    ctx().saveSettingsDebounced();
   });
   $('#pp_st_watcher').prop('checked', s.watcher).on('change', function(){
     s.watcher = $(this).is(':checked');
-    saveSettingsDebounced();
+    ctx().saveSettingsDebounced();
   });
   $('#pp_st_every').val(String(s.every)).on('change', function(){
     s.every = parseInt($(this).val(), 10) || 5;
-    saveSettingsDebounced();
+    ctx().saveSettingsDebounced();
+  });
+}
+
+function wireEvents(){
+  var ev = ctx().eventSource, et = ctx().event_types;
+
+  ev.on(et.APP_READY, function(){
+    mountSettings();
+    root = document.createElement('div');
+    root.id = ROOT_ID;
+    document.body.appendChild(root);
+    loadDB(function(){
+      if (!alive()) return;
+      resolveCK();
+      tick();
+      render();
+      if (syncOn()) { cloudPull(); return; }
+      var savedNick = lsGet(NICK_KEY) || '';
+      if (savedNick && !syncOn()) {
+        sync().nick = savedNick; persist();
+        cloudPull(function(ok){ if (ok) { tick(); render(); } });
+      }
+    });
   });
 
-  root = document.createElement('div');
-  root.id = ROOT_ID;
-  document.body.appendChild(root);
-
-  loadDB(function(){
-    if (!alive()) return;
-    resolveCK();
-    tick();
-    render();
-    if (syncOn()) { cloudPull(); return; }
-    var savedNick = lsGet(NICK_KEY) || '';
-    if (savedNick && !syncOn()) {
-      sync().nick = savedNick; persist();
-      cloudPull(function(ok){ if (ok) { tick(); render(); } });
+  ev.on(et.CHAT_CHANGED, function(){
+    if (alive() && loaded) resolveCK();
+  });
+  ev.on(et.MESSAGE_SENT, function(){
+    if (alive() && loaded) onMsg();
+  });
+  ev.on(et.CHARACTER_MESSAGE_RENDERED, function(){
+    if (alive() && loaded) onMsg();
+  });
+  ev.on(et.GENERATION_STARTED, function(){
+    if (!alive() || !loaded) return;
+    var list = petsOf(CK), i;
+    for (i=0;i<list.length;i++) {
+      list[i].pend = [];
+      if (list[i].now) list[i].now.sent = true;
     }
+    pushCtx();
+    save();
   });
 
   setInterval(function(){
@@ -2105,24 +2118,11 @@ jQuery(async () => {
   window.addEventListener('pagehide', function(){ saveNow(); cloudBeacon(); });
   window.addEventListener('beforeunload', function(){ saveNow(); cloudBeacon(); });
   window.addEventListener('resize', function(){ if (alive()) { placeFab(); if (open) placePanel(); } });
+}
 
-  eventSource.on(event_types.CHAT_CHANGED, function(){
-    if (alive() && loaded) resolveCK();
-  });
-  eventSource.on(event_types.MESSAGE_SENT, function(){
-    if (alive() && loaded) onMsg();
-  });
-  eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, function(){
-    if (alive() && loaded) onMsg();
-  });
-  eventSource.on(event_types.GENERATION_STARTED, function(){
-    if (!alive() || !loaded) return;
-    var list = petsOf(CK), i;
-    for (i=0;i<list.length;i++) {
-      list[i].pend = [];
-      if (list[i].now) list[i].now.sent = true;
-    }
-    pushCtx();
-    save();
-  });
+jQuery(function(){
+  try { wireEvents(); console.log('[PUSYA PET] v2.4 loaded'); }
+  catch(e){ console.error('[PUSYA PET] init failed', e); }
 });
+
+})();

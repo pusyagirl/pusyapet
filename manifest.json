@@ -3,8 +3,12 @@
     "loading_order": 1,
     "requires": [],
     "optional": [],
-    "js": "index.js",
-    "css": "style.css",
+    "js": [
+        "index.js"
+    ],
+    "css": [
+        "style.css"
+    ],
     "author": "PUSYA",
     "version": "2.4.0",
     "homePage": "",
