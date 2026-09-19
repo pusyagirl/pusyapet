@@ -1,4 +1,4 @@
-// PUSYA PET v2.4 — SillyTavern
+// PUSYA PET v1.0 — SillyTavern
 (function(){
 'use strict';
 
@@ -501,7 +501,7 @@ function syncUrl(extra){
       fetch(HOME_URL + '/api/heartbeat', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ plugin:'pets', nick:nick, version:'2.4.0', data:{} })
+        body: JSON.stringify({ plugin:'pets', nick:nick, version:'1.0.0', data:{} })
       }).catch(function(){});
     } catch(e){}
   }
@@ -1364,7 +1364,7 @@ function disarm(){ armed = { id:'', at:0 }; }
 var srvOpen = false;
 
 function formOpen(){ return open && (view === 'new' || view === 'edit' ||
-  (view === 'cfg' && (tab === 'model' || tab === 'cloud' || tab === 'skin'))); }
+  (view === 'cfg' && (tab === 'model' || tab === 'skin'))); }
 function renderBg(){ if (!formOpen()) render(); else pushCtx(); }
 
 function snapScroll(){
@@ -1440,14 +1440,7 @@ function render(){
   pushCtx();
 }
 
-function syncDot(){
-  if (!syncOn()) return '';
-  var m = '';
-  if (CLOUD.state === 'err') m = 'err';
-  else if (CLOUD.dirty && CLOUD.dirtyAt && (now() - CLOUD.dirtyAt) > 20000) m = 'dirty';
-  else if (CLOUD.state === 'ok') m = 'ok';
-  return m ? '<u class="pp-sync" data-sy="' + m + '"></u>' : '';
-}
+function syncDot(){ return ''; }
 
 function panelHTML(p, fresh){
   var body, head;
@@ -1622,7 +1615,7 @@ function clockOf(t){
 }
 
 function viewCfg(p){
-  var tabs = [['life','жизнь'],['look','вид'],['skin','тема'],['model','модель'],['cloud','облако']];
+  var tabs = [['life','жизнь'],['look','вид'],['skin','тема'],['model','модель']];
   var h = '<div class="pp-tabs">';
   for (var i=0;i<tabs.length;i++)
     h += '<button class="pp-tab" data-tab="' + tabs[i][0] + '" data-on="' + (tab===tabs[i][0]?'1':'0') + '">' + tabs[i][1] + '</button>';
@@ -1630,7 +1623,6 @@ function viewCfg(p){
   if (tab === 'model') return h + cfgModel();
   if (tab === 'look')  return h + cfgLook();
   if (tab === 'skin')  return h + cfgSkin();
-  if (tab === 'cloud') return h + cfgCloud();
   return h + cfgLife(p);
 }
 function cfgCloud(){
@@ -1774,6 +1766,11 @@ function fieldsHTML(d, compact){
   h += '<div class="pp-f"><label>свои повадки</label><textarea class="pp-i" id="pp-desc" rows="2" placeholder="трусливый, ворует еду, спит на коленях, боится грозы…" maxlength="200" style="resize:vertical;min-height:38px">' + esc(d.desc || '') + '</textarea>';
   h += '<div class="pp-note">Опиши характер и привычки своими словами — модель будет вести питомца именно так.</div></div>';
 
+  if (compact) {
+    h += '<div class="pp-f" style="margin-top:6px"><label>твой ник</label><input class="pp-i" id="pp-snick" value="' + esc(String(sync().nick||'')) + '" placeholder="для сохранения между устройствами" spellcheck="false" maxlength="40"></div>';
+    h += '<div class="pp-note">Ник — как пароль: по нему питомцы переезжают на другое устройство. Не угадываемый.</div>';
+  }
+
   if (compact && !advOpen) {
     h += '<button class="pp-b pp-ghost" data-adv-toggle="1" style="margin-top:4px">▾ ещё</button>';
     return h;
@@ -1822,7 +1819,8 @@ function viewNew(){
                         breed:'', age:'', desc:'', icon:'🐾', night:null, stage:'adult',
                         owner:'me', together:'new', known:false, newborn:true };
   return '<div class="pp-note" style="margin-bottom:10px">У каждого чата свой питомец. Жить начнёт сразу.</div>' +
-    fieldsHTML(draft, true) + '<button class="pp-b" id="pp-create">🐾 завести</button>';
+    fieldsHTML(draft, true) + '<button class="pp-b" id="pp-create">🐾 завести</button>' +
+    '<div class="pp-note" style="margin-top:8px">Добавь свою модель в настройках (⚙️ → модель), чтобы питомец реагировал на сцену.</div>';
 }
 function viewEdit(p){
   if (!draft) draft = { name:p.name, kind:p.kind, arch:p.arch, archAuto:p.archAuto !== false, temper:p.temper,
@@ -1897,10 +1895,8 @@ function bind(){
   if (close) close.onclick = function(){ open = false; draft = null; adding = false; render(); };
 
   each('[data-go]', function(el){ el.onclick = function(){ view = el.getAttribute('data-go'); draft = null; adding = false; render(); }; });
-  each('[data-cloud]', function(el){ el.onclick = function(){ view = 'cfg'; tab = 'cloud'; draft = null; render(); }; });
   each('[data-tab]', function(el){ el.onclick = function(){
     if (tab === 'model') grabModel();
-    if (tab === 'cloud') grabSync();
     tab = el.getAttribute('data-tab'); save(); render();
   }; });
   each('[data-act]', function(el){ el.onclick = function(){ if (!el.hasAttribute('disabled')) doAction(el.getAttribute('data-act')); }; });
@@ -1911,7 +1907,6 @@ function bind(){
   each('[data-more]', function(el){ el.onclick = function(){ moreOpen = true; render(); }; });
   each('[data-pet]', function(el){ el.onclick = function(){ setAct(el.getAttribute('data-pet')); save(); render(); }; });
   each('[data-add]', function(el){ el.onclick = function(){ adding = true; view = 'new'; draft = null; render(); }; });
-  each('[data-srv]', function(el){ el.onclick = function(){ srvOpen = true; render(); }; });
 
   each('[data-skin]', function(el){ el.onclick = function(){
     var id = el.getAttribute('data-skin'), i;
@@ -2007,47 +2002,13 @@ function bind(){
       W.err = ''; disarm(); saveNow(); render(); flash('модель очищена');
     };
   });
-  ['pp-surl','pp-snick'].forEach(function(id){
-    var e = document.getElementById(id);
-    if (e) e.oninput = function(){
-      grabSync(); CLOUD.taken = false;
-      if (String(sync().nick||'').trim() !== CLOUD.nick) { CLOUD.pulled = false; CLOUD.state = 'off'; CLOUD.err = ''; }
-      save();
-    };
-  });
-
-  each('[data-claim]', function(el){
-    el.onclick = function(){
-      grabSync(); saveNow();
-      var s = sync();
-      if (!s.nick) { flash('придумай ник'); return; }
-      if (CLOUD.state === 'ok' && CLOUD.pulled && CLOUD.nick === s.nick) { cloudPush(); flash('отправляю'); return; }
-      cloudCheck(s.nick, function(err, j){
-        if (err) { CLOUD.state = 'err'; CLOUD.err = err.message; render(); return; }
-        if (j && j.free === false) {
-          CLOUD.taken = true; CLOUD.state = 'err'; CLOUD.err = 'ник занят';
-          render(); return;
-        }
-        cloudClaim(s.nick, function(e2){ flash(e2 ? CLOUD.err : 'ник занят за тобой'); });
-      });
-    };
-  });
-  each('[data-attach]', function(el){
-    el.onclick = function(){
-      grabSync(); saveNow();
-      if (!syncOn()) { flash('придумай ник'); return; }
-      if (!isArmed('attach')) { arm('attach'); return; }
-      disarm();
-      DB.rev = 0;
-      cloudPull(function(ok){ flash(ok ? 'забрал из облака' : (CLOUD.err || 'не вышло')); }, true);
-    };
-  });
-
   var create = document.getElementById('pp-create');
   if (create) create.onclick = function(){
     grab();
     if (!draft.name.trim()) { flash('нужна кличка'); return; }
     if (!ckReady) { flash('секунду, ищу чат'); return; }
+    var nickVal = fld('pp-snick');
+    if (nickVal !== null) { sync().nick = nickVal.trim(); persist(); }
     draft.name = draft.name.trim();
     draft.kind = draft.kind.trim() || ARCH[draft.arch].label;
     draft.icon = draft.icon.trim() || '🐾';
@@ -2300,7 +2261,7 @@ function boot(){
 }
 
 jQuery(function(){
-  try { boot(); console.log('[PUSYA PET] v2.4 loaded'); }
+  try { boot(); console.log('[PUSYA PET] v1.0 loaded'); }
   catch(e){ console.error('[PUSYA PET] init failed', e); }
 });
 
