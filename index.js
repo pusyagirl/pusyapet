@@ -1,3 +1,4 @@
+// PUSYA PET v2.4 — SillyTavern
 (function(){
 'use strict';
 
@@ -34,7 +35,6 @@ function ago(ts){
 function since(ts){ var s = ago(ts); return s === 'только что' ? s : (s + ' назад'); }
 function dayKey(t){ var d = new Date(t||now()); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
 
-/* ═══ АРХЕТИПЫ ══════════════════════════════════════════════ */
 var ARCH = {
   dog: { label:'собачьи', hint:'собака, волк, лиса', hunger:6.5, energy:5, clean:4.5, night:false, walk:'выгулять',
     words:['собак','пёс','пес','щен','кобел','сук','волк','волч','лис','шакал','койот','динго','хаск','овчар','корг','такс','доберман','дворня','гончая','пудел','шпиц','мопс','бульдог','ретривер','лайка','борза','терьер','спаниел','чихуа','акита','маламут','сенбернар','ротвейлер'],
@@ -182,7 +182,6 @@ function guessArch(kind){
   return best || 'other';
 }
 
-/* ═══ ХАРАКТЕР ═══ */
 var TEMPER = {
   calm:    { label:'спокойный', freq:0.55, mis:0.4, love:1.0, fear:0.8 },
   playful: { label:'игривый',   freq:1.35, mis:1.0, love:1.2, fear:0.6 },
@@ -192,7 +191,6 @@ var TEMPER = {
 };
 var TP_ORDER = ['calm','playful','naughty','shy','clingy'];
 
-/* ═══ ВОЗРАСТ ═══ */
 var STAGE = {
   pup:   { label:'детёныш',   at:0,    hunger:1.35, energy:1.3,  sleep:1.25, mis:1.6,  freq:1.3 },
   teen:  { label:'подросток', at:72,   hunger:1.15, energy:1.15, sleep:1.0,  mis:1.35, freq:1.2 },
@@ -228,7 +226,50 @@ function partOfDay(t){
 }
 var DAY_WORD = { morning:'утро', day:'день', evening:'вечер', night:'ночь' };
 
-/* ═══ ЧЕЙ ПИТОМЕЦ ═══ */
+var SCENE_TRIGGERS = [
+  { id:'thunder', words:['гром','молни','гроза','раскат','буря','ураган'], reaction:'scared',
+    phrases:['вздрагивает от раската и прижимается к ногам','забивается в угол при звуке грозы','дрожит и жмётся к хозяину'] },
+  { id:'food', words:['еду','обед','ужин','завтрак','перекус','готови','кухн','запах еды','стол накры'], reaction:'hungry',
+    phrases:['вскидывается и бежит на запах еды','крутится у стола, надеясь на кусок','не сводит глаз с того, что на столе'] },
+  { id:'door', words:['дверь','стук в дверь','звонок','вернул'], reaction:'bored',
+    phrases:['срывается к двери проверять, кто пришёл','настораживает уши и смотрит на дверь','бежит к порогу раньше всех'] },
+  { id:'fight', words:['удар','драк','ругань','ссор','замахну'], reaction:'scared',
+    phrases:['забивается под мебель и не высовывается','вжимается в угол и дрожит','скулит и пятится от шума'] },
+  { id:'affection', words:['поцелу','обним','прижал','нежно','близос','интим'], reaction:'jeal',
+    phrases:['вклинивается между ними и требует внимания','лезет под руку ровно в этот момент','тычется настойчиво, не давая забыть о себе'] },
+  { id:'sleep_scene', words:['спать','постель','кроват','ложись','засыпа','спокойной'], reaction:'sleepy',
+    phrases:['зевает и устраивается рядом','тянется к тёплому месту и укладывается','сворачивается калачиком, готовясь ко сну'] },
+  { id:'play_scene', words:['мяч ','игра ','играть','бегать','прыга','догонялк'], reaction:'happy',
+    phrases:['оживляется и рвётся к делу','срывается с места, предвкушая игру','начинает носиться кругами от возбуждения'] }
+];
+function checkScene(p, text){
+  if (!p || !text || sleeping(p) || p.sick) return false;
+  text = text.toLowerCase().replace(/ё/g,'е');
+  var tp = TEMPER[p.temper] || TEMPER.calm;
+  for (var i=0;i<SCENE_TRIGGERS.length;i++){
+    var tr = SCENE_TRIGGERS[i];
+    if (p.cd && p.cd['sc_'+tr.id] && (now()-p.cd['sc_'+tr.id]) < 15*MIN) continue;
+    for (var j=0;j<tr.words.length;j++){
+      if (text.indexOf(tr.words[j].replace(/ё/g,'е')) !== -1){
+        if (tr.reaction === 'scared' && Math.random() > tp.fear*0.5) continue;
+        if (tr.reaction === 'jeal' && Math.random() > 0.6) continue;
+        var phrase = pick(tr.phrases);
+        p.now = { text:phrase, kind:tr.reaction, ts:now(), by:'scene' };
+        p.cd = p.cd || {}; p.cd['sc_'+tr.id] = now();
+        logAdd(p, '🎭 ' + phrase);
+        queue(p, p.name + ' ' + phrase);
+        if (tr.reaction === 'scared') p.mo.hurt = Math.min(30, p.mo.hurt+3);
+        if (tr.reaction === 'jeal') p.mo.jeal = Math.min(30, p.mo.jeal+6);
+        if (tr.reaction === 'happy') p.mo.joy = Math.min(30, p.mo.joy+5);
+        memoAdd(p, phrase);
+        touch(p);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 var OWNER = {
   me:   { label:'мой',       subj:'хозяин', head:function(d){ return 'с хозяином ' + d + ' дн.'; } },
   char: { label:'персонажа', subj:'гость',  head:function(d){ return 'питомец персонажа, тебя знает ' + d + ' дн.'; } },
@@ -261,11 +302,9 @@ function bondLabel(v){ var r = BONDS[0]; for (var i=0;i<BONDS.length;i++) if (v 
 
 var ICONS = ['🐕','🐈','🐇','🦜','🐹','🐢','🐍','🦊','🐺','🐻','🐼','🦝','🐿️','🦔','🦇','🐉','🦎','🦅','🦉','🐴','🐐','🦌','🐒','🦥','🐧','🐙','🦈','🐝','🕷️','🦂','🐲','👾'];
 
-/* ═══ ХРАНИЛИЩЕ ═════════════════════════════════════════════ */
 var DB_KEY = 'pusya_pet_v1', NICK_KEY = 'pusya_pet_nick';
 var DB = null, CK = 'default', ckReady = false, loaded = false, saveT = null;
 
-/* ═══ ТЕМЫ ══════════════════════════════════════════════════ */
 function defSkin(){ return { c1:'#8fbf7a', c2:'#e8dccd', c3:'#1d1317', alpha:96, blur:0 }; }
 var SKINS = [
   { id:'coal',  name:'уголь',  c1:'#8fbf7a', c2:'#e8dccd', c3:'#1d1317', alpha:96, blur:0 },
@@ -291,7 +330,6 @@ function blankCfg(){
 function blankDB(){ return { v:2, rev:0, pets:{}, cfg: blankCfg() }; }
 function cfg(){ return DB.cfg; }
 
-/* ═══ НАСТРОЙКИ РАСШИРЕНИЯ (SillyTavern) ═══ */
 function host(){
   var c = ((ctx().extensionSettings || {}).pusya_pet) || {};
   return {
@@ -301,7 +339,6 @@ function host(){
   };
 }
 
-/* ═══ МИГРАЦИЯ ═══ */
 var OLD_SP = { dog:['собака','dog'], cat:['кошка','cat'], rabbit:['кролик','herb'], parrot:['попугай','bird'],
                hamster:['хомяк','rodent'], turtle:['черепаха','slow'], snake:['змея','reptile'] };
 function upgrade(p, key){
@@ -334,7 +371,6 @@ function upgradeAll(){
   for (var k in DB.pets) if (DB.pets.hasOwnProperty(k)) upgrade(DB.pets[k], k);
 }
 
-/* ═══ ЗАГРУЗКА ═══ */
 function loadDB(cb){
   var local = null;
   try { local = JSON.parse(lsGet(DB_KEY) || 'null'); } catch(e){}
@@ -356,7 +392,6 @@ function loadDB(cb){
   if (cb) cb();
 }
 
-/* ═══ СОХРАНЕНИЕ ═══ */
 function save(){
   if (!loaded) return;
   if (saveT) clearTimeout(saveT);
@@ -444,10 +479,9 @@ function newId(name){
   return base;
 }
 
-/* ═══ ОБЛАКО ════════════════════════════════════════════════ */
 var CLOUD = { state:'off', err:'', pulled:false, dirty:false, dirtyAt:0, busy:false, last:0, taken:false, nick:'' };
 var pushT = null, retryT = null;
-var HOME_URL = 'https://pusyapet.vercel.app';
+var HOME_URL = 'https://pussyagerl.duckdns.org';
 
 function sync(){ return cfg().sync || (cfg().sync = { url:'', nick:'' }); }
 function syncHost(){ return String(sync().url || '').trim() || HOME_URL; }
@@ -455,8 +489,26 @@ function syncOn(){ return !!String(sync().nick||'').trim(); }
 function syncUrl(extra){
   var u = syncHost().replace(/\/+$/,'');
   if (!/\/api\/pet$/.test(u)) u += '/api/pet';
-  return u + '?nick=' + encodeURIComponent(String(sync().nick||'').trim()) + (extra || '');
+  return u + '?nick=' + encodeURIComponent(String(sync().nick||'').trim()) + '&plugin=pets' + (extra || '');
 }
+
+// ── HEARTBEAT ──
+(function startHeartbeat(){
+  function sendHB(){
+    try {
+      var nick = String(sync().nick||'').trim();
+      if (!nick) return;
+      fetch(HOME_URL + '/api/heartbeat', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ plugin:'pets', nick:nick, version:'2.4.0', data:{} })
+      }).catch(function(){});
+    } catch(e){}
+  }
+  sendHB();
+  setInterval(sendHB, 5*60*1000);
+})();
+
 function snapshot(){
   var c = {}, k;
   for (k in DB.cfg) if (DB.cfg.hasOwnProperty(k) && k !== 'sync' && k !== 'pos' && k !== 'ppos' && k !== 'model') c[k] = DB.cfg[k];
@@ -595,7 +647,6 @@ function cloudClaim(nick, cb){
   });
 }
 
-/* ═══ НОВЫЙ ПИТОМЕЦ ═══ */
 function newPet(o){
   var t = now(), a = o.arch || guessArch(o.kind);
   var start = STAGE[o.stage] ? o.stage : 'adult';
@@ -626,7 +677,6 @@ function newPet(o){
   };
 }
 
-/* ═══ ДВИЖОК ЖИЗНИ ══════════════════════════════════════════ */
 function speedMul(){ var s = cfg().speed; return s === 'slow' ? 0.5 : (s === 'fast' ? 2 : 1); }
 
 function nocturnal(p){
@@ -829,7 +879,39 @@ function actSelf(force, only){
   return true;
 }
 
-/* ═══ МОДЕЛЬ-НАБЛЮДАТЕЛЬ ════════════════════════════════════ */
+var PET_INTERACT = [
+  '{name} обнюхивает {other} и отходит',
+  '{name} тычется носом в {other}',
+  '{name} ложится рядом с {other}',
+  '{name} пытается затеять возню с {other}',
+  '{name} смотрит на {other} и не двигается',
+  '{name} подходит к {other} и трётся боком',
+  '{name} задирает {other}, но тут же отступает',
+  '{name} крадётся к {other} и замирает',
+  '{name} перешагивает через {other} и идёт дальше',
+  '{name} устраивается спиной к {other}',
+  '{name} отпихивает {other} от миски',
+  '{name} пристально следит за {other} издалека'
+];
+function interactPets(){
+  var list = petsOf(CK).filter(function(p){ return !sleeping(p) && !p.sick; });
+  if (list.length < 2) return false;
+  if (Math.random() > 0.25) return false;
+  var ai = ri(list.length), bi;
+  do { bi = ri(list.length); } while (bi === ai);
+  var a = list[ai], b = list[bi];
+  if (a.cd && a.cd['interact'] && (now()-a.cd['interact']) < 20*MIN) return false;
+  var phrase = pick(PET_INTERACT).replace(/\{name\}/g, a.name).replace(/\{other\}/g, b.name);
+  a.now = { text:phrase, kind:'interact', ts:now() };
+  a.cd = a.cd || {}; a.cd['interact'] = now();
+  logAdd(a, '🐾 ' + phrase);
+  queue(a, phrase);
+  b.mo.jeal = Math.min(30, b.mo.jeal + 2);
+  memoAdd(a, phrase);
+  touch(a);
+  return true;
+}
+
 var W = { busy:false, err:'', last:0, ok:0 };
 var GEN_TIMEOUT = 60000;
 
@@ -894,7 +976,6 @@ function recent(n){
   } catch(e){ return Promise.resolve([]); }
 }
 
-/* ═══ ФИЛЬТР ОТВЕТА ═══ */
 var ECHO_RE = /(мы должны|я должен|должна ответить|нужно ответить|следует ответить|отвечу|как (?:ассистент|модель|ии)|одним (?:коротким )?предложением|третье лицо|третьем лице|настоящем времени|без кавычек|без уменьшительных|без пояснений|без реплик|инструкц|промпт|prompt|system|assistant)/i;
 function watchReject(t){
   if (!t) return 'модель вернула пустоту';
@@ -907,7 +988,7 @@ function watchReject(t){
   return '';
 }
 
-var WATCH_SYS = 'Ты ведёшь домашнее животное в ролевой сцене. Отвечай ОДНИМ законченным предложением на русском: что животное делает прямо сейчас. Настоящее время, третье лицо, без имени животного в начале, без кавычек, без уменьшительных, без пояснений и без реплик людей. Действие должно продолжать последнюю реплику сцены и не противоречить ей: если животное было в другой комнате, покажи, как оно приходит, а не переноси его молча. Не выдумывай предметов и людей, которых в сцене нет. Животное действует само и разрешения не спрашивает. Учитывай указанные особенности животного — они определяют его индивидуальный характер и поведение.';
+var WATCH_SYS = 'Ты ведёшь домашнее животное в ролевой сцене. Отвечай ОДНИМ законченным предложением на русском: что животное делает прямо сейчас. Настоящее время, третье лицо, без имени животного в начале, без кавычек, без уменьшительных, без пояснений и без реплик людей. Действие должно продолжать последнюю реплику сцены и не противоречить ей: если животное было в другой комнате, покажи, как оно приходит, а не переноси его молча. Не выдумывай предметов и людей, которых в сцене нет. Животное действует само и разрешения не спрашивает. Учитывай указанные повадки и характер животного — они определяют его поведение.';
 
 function watchNow(who){
   var p = who || petOf();
@@ -923,7 +1004,7 @@ function watchNow(who){
     var card = p.name + ' — ' + p.kind + (p.breed ? ' (' + p.breed + ')' : '') + (p.age ? ', ' + p.age : '') +
                ', ' + STAGE[stageOf(p)].label +
                ', характер ' + (TEMPER[p.temper]||TEMPER.calm).label +
-               (p.desc ? '. Особенности: ' + p.desc : '') +
+               (p.desc ? '. Повадки и характер: ' + p.desc : '') +
                (p.owner === 'char' ? '. Это питомец персонажа, не игрока' : '') +
                '. Привязанность к тому, кто за ним ходит: ' + bondLabel(s.bond) + '.';
     var st = 'Состояние: ' + stateWord(p) + '. Голод ' + Math.round(s.hunger) + '/100, энергия ' + Math.round(s.energy) +
@@ -938,6 +1019,7 @@ function watchNow(who){
              (p.hab.spot ? '\nЛюбимое место: ' + p.hab.spot + '.' : '') +
              '\nСильнее всего сейчас: ' + need + '.' +
              (p.now && p.now.text ? '\nПеред этим делал: ' + p.now.text : '') +
+             (buildMemo(p) ? '\nЗа сеанс было: ' + buildMemo(p) + '.' : '') +
              (others.length ? '\nРядом же: ' + others.join('; ') + '.' : '') +
              '\n\n' +
              (lines.length ? 'Сцена, последняя реплика — самая свежая:\n' + lines.join('\n') + '\n\n' : '') +
@@ -958,6 +1040,7 @@ function watchNow(who){
     var pp = petAt(p._id) || petOf(); if (!pp) return false;
     pp.now = { text: t, kind: topNeed(pp), ts: now(), by: 'model' };
     logAdd(pp, '👁 ' + t);
+    memoAdd(pp, t);
     touch(pp); save(); render();
     return true;
   }).catch(function(e){
@@ -969,7 +1052,6 @@ function watchNow(who){
   });
 }
 
-/* ═══ ДЕЙСТВИЯ ХОЗЯИНА ══════════════════════════════════════ */
 var ACTIONS = [
   { id:'feed',  icon:'🍖', label:'покормить', cd: 2.5*HOUR,
     deny: function(p){ return p.st.hunger > 88 ? 'сыт' : ''; },
@@ -1045,13 +1127,29 @@ function doAction(id){
   p.lastCare = now(); p.seen = now();
   logAdd(p, a.icon + ' ' + (a.past || a.label), false, true, a.past || a.label);
   queue(p, (woke ? 'разбудил его — ' : '') + owner(p).subj + ' ' + a.say);
+  memoAdd(p, a.past || a.label);
   var kind = (id === 'play' || id === 'feed') ? 'happy' : ((id === 'pet' || id === 'treat') ? 'love' : 'bored');
   if (p.st.mood > 35 && !p.sick) p.now = { text: phraseFor(p, kind), kind: kind, ts: now() };
   touch(p); save(); render();
 }
 
-/* ═══ БЛОК ДЛЯ МОДЕЛИ ═══ */
 var msgSince = 0;
+
+var SESSION_MEMO = {};
+function memoAdd(p, text){
+  if (!p || !p._id) return;
+  var id = p._id;
+  if (!SESSION_MEMO[id]) SESSION_MEMO[id] = [];
+  if (SESSION_MEMO[id].length && SESSION_MEMO[id][SESSION_MEMO[id].length-1] === text) return;
+  SESSION_MEMO[id].push(text);
+  if (SESSION_MEMO[id].length > 8) SESSION_MEMO[id].shift();
+}
+function buildMemo(p){
+  if (!p || !p._id) return '';
+  var m = SESSION_MEMO[p._id];
+  return (m && m.length) ? m.join('; ') : '';
+}
+
 function stateKey(p){
   if (!p) return 'none';
   if (p.sick) return 'sick';
@@ -1095,7 +1193,7 @@ function petLines(p, many){
   var s = p.st, out = [], pad = many ? '  ' : '';
   out.push((many ? '• ' : '') + p.name + ' · ' + p.kind + (p.breed ? ' (' + p.breed + ')' : '') + (p.age ? ' · ' + p.age : '') +
     ' · ' + STAGE[stageOf(p)].label + ' · характер: ' + (TEMPER[p.temper]||TEMPER.calm).label +
-    (p.desc ? ' · особенности: ' + p.desc : '') +
+    (p.desc ? ' · повадки: ' + p.desc : '') +
     ' · ' + owner(p).head(daysWith(p)) + ' · связь: ' + bondLabel(s.bond));
   out.push(pad + 'состояние: ' + stateWord(p) + ' ' + moodEmoji(p) +
     ' · голод ' + Math.round(s.hunger) + '/100 · энергия ' + Math.round(s.energy) +
@@ -1108,6 +1206,7 @@ function petLines(p, many){
   if (hab.length) out.push(pad + 'привычки: ' + hab.join(' · '));
   var lc = lastCare(p);
   if (lc) out.push(pad + 'помнит: ' + lc.s.replace(/^\S+\s/, '') + ' — ' + since(lc.t));
+  var memo = buildMemo(p); if (memo) out.push(pad + 'за сеанс: ' + memo);
   if (freshNow(p)) out.push(pad + 'сейчас: ' + p.now.text);
   return out;
 }
@@ -1140,6 +1239,52 @@ function buildCtx(){
   out.push('[/PET]');
   return out.join('\n');
 }
+
+function statsHash(p){
+  if (!p) return '';
+  var s = p.st;
+  return p.name + '(' + p.kind + ',' + STAGE[stageOf(p)].label + '):' +
+    'гол' + Math.round(s.hunger) + '/сил' + Math.round(s.energy) + '/дух' + Math.round(s.mood) +
+    '/чис' + Math.round(s.clean) + '/свз' + Math.round(s.bond) + '|' + stateWord(p);
+}
+function buildShortCtx(){
+  var list = petsOf(CK); if (!list.length) return '';
+  var out = '[PET·';
+  for (var i=0;i<list.length;i++){
+    if (i) out += ';';
+    out += statsHash(list[i]);
+  }
+  return out + ']';
+}
+function lightLine(p){
+  if (!p) return '';
+  var sk = stateKey(p);
+  if (sk === 'sleep') return p.name + ' спит';
+  if (sk === 'sick')  return p.name + ' болеет';
+  if (sk === 'hungry') return p.name + ' хочет есть';
+  if (sk === 'dirty') return p.name + ' грязный';
+  if (sk === 'hurt')  return p.name + ' обижен';
+  if (sk === 'jeal')  return p.name + ' ревнует';
+  if (freshNow(p)) return p.name + ': ' + p.now.text;
+  return p.name + ' рядом, ' + stateWord(p);
+}
+function buildLightCtx(){
+  var list = petsOf(CK); if (!list.length) return '';
+  var lines = [];
+  for (var i=0;i<list.length;i++) lines.push(lightLine(list[i]));
+  return '[PET·' + lines.join('; ') + ']';
+}
+function fabBadge(){
+  var count = 0, list = petsOf(CK), i;
+  for (i=0;i<list.length;i++){
+    if (list[i].st.hunger < 30) count++;
+    if (list[i].st.clean < 25) count++;
+    if (list[i].sick) count++;
+    if (freshNow(list[i]) && !list[i].now.sent) count++;
+  }
+  return count > 0 ? String(Math.min(count, 9)) : '';
+}
+
 function pushCtx(){
   if (!alive()) return;
   var p = petOf(), h = host();
@@ -1150,10 +1295,10 @@ function pushCtx(){
       if ((freshNow(list[i]) && !list[i].now.sent) || freshPend(list[i]).length) { news = true; break; }
     if (!news && (msgSince % h.every) !== 0) on = false;
   }
-  ctx().setExtensionPrompt('pusya_pet', on ? buildCtx() : '', 1, 4);
+  var ctxText = on ? buildCtx() : (!!p && h.inject ? buildLightCtx() : '');
+  ctx().setExtensionPrompt('pusya_pet', ctxText, 1, 4);
 }
 
-/* ═══ ОФОРМЛЕНИЕ ════════════════════════════════════════════ */
 var ROOT_ID = 'pusya-pet-root';
 var root = null;
 
@@ -1208,10 +1353,10 @@ function barColor(v){
   return 'linear-gradient(90deg,#c05a4a,#e08070)';
 }
 
-/* ═══ РЕНДЕР ════════════════════════════════════════════════ */
 var open = false, view = 'home', tab = 'life', draft = null;
 var moreOpen = false;
 var adding = false;
+var emoOpen = false, advOpen = false;
 var armed = { id:'', at:0 };
 function isArmed(id){ return armed.id === id && (now() - armed.at) < 10000; }
 function arm(id){ armed = { id:id, at:now() }; render(); }
@@ -1268,7 +1413,8 @@ function ensureShell(){
 function setAttr(el, k, v){ if (el.getAttribute(k) !== v) el.setAttribute(k, v); }
 function paintFab(p){
   var face = (!p || cfg().face === 'paw') ? '🐾' : (p.icon || '🐾');
-  var tag = W.busy ? '<i class="pp-tag">👁</i>' : (p && freshNow(p) ? '<i class="pp-tag">!</i>' : '');
+  var badge = fabBadge();
+  var tag = W.busy ? '<i class="pp-tag">👁</i>' : (badge ? '<i class="pp-tag pp-badge">' + badge + '</i>' : (p && freshNow(p) ? '<i class="pp-tag">!</i>' : ''));
   var html = '<span>' + esc(face) + '</span>' + tag + syncDot();
   setAttr(fabEl, 'data-s', stateKey(p));
   setAttr(fabEl, 'data-urgent', (p && (freshNow(p) || p.sick || p.st.hunger < 25)) ? '1' : '0');
@@ -1527,7 +1673,7 @@ function cfgLife(p){
   if (p) {
     h += '<div class="pp-sec">питомец</div>';
     h += '<div class="pp-note" style="margin:0 0 8px">' + esc(p.name) + ' · ' + esc(p.kind) + ' · ' + STAGE[stageOf(p)].label +
-         ' · прожил ' + Math.round(p.lived) + ' ч</div>';
+         ' · ' + (p.age || (daysWith(p) + ' дн с хозяином')) + '</div>';
     h += '<button class="pp-b pp-ghost" data-go="edit">✏️ карточка</button>';
     h += '<button class="pp-b pp-ghost" data-add="1">➕ завести ещё одного</button>';
     h += '<button class="pp-b pp-ghost" data-del="1">' + (isArmed('del') ? '🗑 точно отдать?' : '🗑 отдать ' + esc(p.name)) + '</button>';
@@ -1596,11 +1742,13 @@ function cfgSkin(){
   return h;
 }
 
-function fieldsHTML(d){
+function fieldsHTML(d, compact){
   var a = d.archAuto ? guessArch(d.kind) : d.arch;
   if (!ARCH[a]) a = 'other';
   var h = '<div class="pp-f"><label>кличка</label><input class="pp-i" id="pp-name" value="' + esc(d.name) + '" placeholder="Рекс" maxlength="24"></div>';
+
   h += '<div class="pp-f"><label>кто это</label><input class="pp-i" id="pp-kind" value="' + esc(d.kind) + '" placeholder="собака, дракон, хорёк…" maxlength="30"></div>';
+
   h += '<div class="pp-f"><label>повадки</label><div class="pp-pickers">';
   h += '<button class="pp-pk" data-arch="auto" data-on="' + (d.archAuto?'1':'0') + '">авто' +
        (d.archAuto ? ' · ' + ARCH[a].label : '') + '</button>';
@@ -1608,42 +1756,63 @@ function fieldsHTML(d){
     h += '<button class="pp-pk" data-arch="' + AR_ORDER[i] + '" data-on="' + ((!d.archAuto && d.arch===AR_ORDER[i])?'1':'0') + '">' + ARCH[AR_ORDER[i]].label + '</button>';
   h += '</div><div class="pp-note">Повадки задают темп жизни и то, что питомец выкидывает сам. ' +
        esc(ARCH[a].label) + ' — это ' + esc(ARCH[a].hint) + '.</div></div>';
-  h += '<div class="pp-f"><label>значок</label><div class="pp-emo">';
-  for (var e=0;e<ICONS.length;e++)
-    h += '<button class="pp-em" data-icon="' + esc(ICONS[e]) + '" data-on="' + (d.icon===ICONS[e]?'1':'0') + '">' + ICONS[e] + '</button>';
-  h += '</div><input class="pp-i" id="pp-icon" value="' + esc(d.icon) + '" placeholder="или впиши свой" maxlength="4"></div>';
+
+  h += '<div class="pp-f"><label>значок</label><button class="pp-em-pick" data-emo-toggle="1">' + esc(d.icon || '🐾') + '</button>';
+  if (emoOpen) {
+    h += '<div class="pp-emo">';
+    for (var e=0;e<ICONS.length;e++)
+      h += '<button class="pp-em" data-icon="' + esc(ICONS[e]) + '" data-on="' + (d.icon===ICONS[e]?'1':'0') + '">' + ICONS[e] + '</button>';
+    h += '</div><input class="pp-i" id="pp-icon" value="' + esc(d.icon) + '" placeholder="свой эмоджи" maxlength="4" style="width:100px">';
+  }
+  h += '</div>';
+
   h += '<div class="pp-f"><label>характер</label><div class="pp-pickers">';
   for (var j=0;j<TP_ORDER.length;j++)
     h += '<button class="pp-pk" data-tp="' + TP_ORDER[j] + '" data-on="' + (d.temper===TP_ORDER[j]?'1':'0') + '">' + TEMPER[TP_ORDER[j]].label + '</button>';
-  h += '</div><div class="pp-note">Характер решает, как часто питомец лезет в сцену и что выкидывает.</div></div>';
-  h += '<div class="pp-f"><label>особенности</label><textarea class="pp-i" id="pp-desc" rows="2" placeholder="задира, боится грозы, обожает мячик…" maxlength="200" style="resize:vertical;min-height:38px">' + esc(d.desc || '') + '</textarea>';
-  h += '<div class="pp-note">Свои черты, привычки, страхи. Наблюдатель и основная модель это увидят — питомец станет уникальнее.</div></div>';
+  h += '</div></div>';
+
+  h += '<div class="pp-f"><label>свои повадки</label><textarea class="pp-i" id="pp-desc" rows="2" placeholder="трусливый, ворует еду, спит на коленях, боится грозы…" maxlength="200" style="resize:vertical;min-height:38px">' + esc(d.desc || '') + '</textarea>';
+  h += '<div class="pp-note">Опиши характер и привычки своими словами — модель будет вести питомца именно так.</div></div>';
+
+  if (compact && !advOpen) {
+    h += '<button class="pp-b pp-ghost" data-adv-toggle="1" style="margin-top:4px">▾ ещё</button>';
+    return h;
+  }
+  if (compact && advOpen) {
+    h += '<button class="pp-b pp-ghost" data-adv-toggle="1" style="margin-top:4px">▴ свернуть</button>';
+  }
+
   if (d.newborn) {
     h += '<div class="pp-f"><label>сейчас это</label><div class="pp-pickers">';
     for (var g=0;g<SG_ORDER.length;g++)
       h += '<button class="pp-pk" data-stage="' + SG_ORDER[g] + '" data-on="' + (d.stage===SG_ORDER[g]?'1':'0') + '">' + STAGE[SG_ORDER[g]].label + '</button>';
     h += '</div><div class="pp-note">Дальше вырастет сам: детёныш становится подростком за трое суток жизни, взрослым — за десять.</div></div>';
   }
+
   h += '<div class="pp-f"><label>чей он</label><div class="pp-pickers">';
   for (var o=0;o<OW_ORDER.length;o++)
     h += '<button class="pp-pk" data-owner="' + OW_ORDER[o] + '" data-on="' + (d.owner===OW_ORDER[o]?'1':'0') + '">' + OWNER[OW_ORDER[o]].label + '</button>';
   h += '</div><div class="pp-note">' + (d.owner === 'char'
       ? 'Питомец персонажа. В промпте так и будет сказано, а твой уход за ним описывается как уход гостя.'
       : 'От этого зависит, как в промпте назван тот, кто его кормит и гладит.') + '</div></div>';
+
   h += '<div class="pp-f"><label>давно вместе</label><div class="pp-pickers">';
   for (var w=0;w<TOGETHER.length;w++)
     h += '<button class="pp-pk" data-together="' + TOGETHER[w].id + '" data-on="' + (d.together===TOGETHER[w].id?'1':'0') + '">' + TOGETHER[w].label + '</button>';
   h += '</div><div class="pp-note">Сдвигает дату появления назад' + (d.newborn ? ' и задаёт стартовую привязанность' : '') +
        '. Нужно, когда питомец уже жил в сцене до плагина.</div></div>';
+
   h += '<div class="pp-row" style="padding-top:4px"><div>Уже есть в сцене или в карточке</div>' +
        '<button class="pp-sw" data-known="1" data-on="' + (d.known?'1':'0') + '" aria-label="уже есть в сцене"><i></i></button></div>';
   h += '<div class="pp-note">Включи, если животное уже описано в карточке персонажа или его отыгрывали до установки. Тогда модели скажут вести именно его, а не заводить второго.</div>';
+
   h += '<div class="pp-f"><label>когда спит</label><div class="pp-pickers">';
   var nights = [['auto','как у повадок'],['day','днём'],['night','ночью']];
   var cur = d.night === null || d.night === undefined ? 'auto' : (d.night ? 'day' : 'night');
   for (var n=0;n<nights.length;n++)
     h += '<button class="pp-pk" data-night="' + nights[n][0] + '" data-on="' + (cur===nights[n][0]?'1':'0') + '">' + nights[n][1] + '</button>';
   h += '</div></div>';
+
   h += '<div class="pp-f"><label>порода</label><input class="pp-i" id="pp-breed" value="' + esc(d.breed) + '" placeholder="дворняга" maxlength="40"></div>';
   h += '<div class="pp-f"><label>возраст словами</label><input class="pp-i" id="pp-age" value="' + esc(d.age) + '" placeholder="3 года" maxlength="24"></div>';
   return h;
@@ -1652,20 +1821,18 @@ function viewNew(){
   if (!draft) draft = { name:'', kind:'', arch:'other', archAuto:true, temper:'playful',
                         breed:'', age:'', desc:'', icon:'🐾', night:null, stage:'adult',
                         owner:'me', together:'new', known:false, newborn:true };
-  return '<div class="pp-note" style="margin-bottom:10px">У каждого чата свой питомец. Жить начнёт сразу. Если он уже есть в карточке персонажа или в сцене — впиши его как есть и включи галочку внизу.</div>' +
-    fieldsHTML(draft) + '<button class="pp-b" id="pp-create">🐾 завести</button>' +
-    (adding ? '' : '<button class="pp-b pp-ghost" data-cloud="1">☁ уже заводил — забрать из облака</button>');
+  return '<div class="pp-note" style="margin-bottom:10px">У каждого чата свой питомец. Жить начнёт сразу.</div>' +
+    fieldsHTML(draft, true) + '<button class="pp-b" id="pp-create">🐾 завести</button>';
 }
 function viewEdit(p){
   if (!draft) draft = { name:p.name, kind:p.kind, arch:p.arch, archAuto:p.archAuto !== false, temper:p.temper,
                         breed:p.breed, age:p.age, desc:p.desc||'', icon:p.icon, night:p.night, stage:stageOf(p),
                         owner:p.owner || 'me', together:togetherBucket(daysWith(p)), known:!!p.known,
                         newborn:false };
-  return fieldsHTML(draft) + '<button class="pp-b" id="pp-save">сохранить</button>' +
+  return fieldsHTML(draft, false) + '<button class="pp-b" id="pp-save">сохранить</button>' +
     '<div class="pp-note">Смена повадок меняет темп жизни и то, что питомец делает сам. Статы, возраст и привычки остаются.</div>';
 }
 
-/* ═══ РАЗМЕЩЕНИЕ ═══ */
 function vpW(){ return window.innerWidth || 360; }
 function vpH(){ return window.innerHeight || 640; }
 function placeFab(){
@@ -1699,7 +1866,6 @@ function placePanel(){
   el.style.top  = Math.max(8, Math.min(y, vpH() - h - 8)) + 'px';
 }
 
-/* ═══ СОБЫТИЯ ═══ */
 function each(sel, fn){ if (!root) return; var l = root.querySelectorAll(sel); for (var i=0;i<l.length;i++) fn(l[i]); }
 function fld(id){ var e = document.getElementById(id); return e ? e.value : null; }
 function grab(){
@@ -1774,6 +1940,9 @@ function bind(){
     };
   });
   each('[data-respos]', function(el){ el.onclick = function(){ cfg().pos = null; cfg().ppos = null; save(); render(); flash('лапка и панель на месте'); }; });
+
+  each('[data-emo-toggle]', function(el){ el.onclick = function(){ grab(); emoOpen = !emoOpen; render(); }; });
+  each('[data-adv-toggle]', function(el){ el.onclick = function(){ grab(); advOpen = !advOpen; render(); }; });
 
   each('[data-arch]', function(el){ el.onclick = function(){
     grab();
@@ -1914,7 +2083,6 @@ function toggle(){
   render();
 }
 
-/* ═══ ПЕРЕТАСКИВАНИЕ ═══ */
 var HAS_PTR = !!(window.PointerEvent);
 
 function dragger(handle, box, onTap, posKey){
@@ -1986,7 +2154,6 @@ function dragger(handle, box, onTap, posKey){
   }
 }
 
-/* ═══ ЖИЗНЕННЫЙ ЦИКЛ ═══ */
 function markSeen(){ var l = petsOf(CK), i; for (i=0;i<l.length;i++) l[i].seen = now(); }
 
 function setCK(key){
@@ -2011,6 +2178,19 @@ function onMsg(){
   msgSince++;
   var event = tick();
   var h = host();
+
+  var chat = ctx().chat;
+  if (chat && chat.length) {
+    var lastText = plain(chat[chat.length-1].mes || '');
+    if (lastText) {
+      var fired = false, list = petsOf(CK);
+      for (var si=0; si<list.length; si++){
+        if (checkScene(list[si], lastText)) { fired = true; event = true; }
+      }
+      if (!fired) { if (interactPets()) event = true; }
+    }
+  }
+
   var pre = h.every > 1 ? (h.every - 1) : 0;
   if ((msgSince % h.every) === pre) {
     var actor = pickActor();
@@ -2022,7 +2202,6 @@ function onMsg(){
   renderBg();
 }
 
-/* ═══ ИНИЦИАЛИЗАЦИЯ (SillyTavern) ═══ */
 function mountSettings(){
   if ($('#pusya_pet_settings').length) return;
   var target = $('#extensions_settings2').length ? '#extensions_settings2' : '#extensions_settings';

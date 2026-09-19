@@ -25,6 +25,7 @@
 .pp-fab[data-s="hide"] > span,.pp-fab[data-s="hurt"] > span{opacity:.5;}
 .pp-fab i.pp-tag{position:absolute;top:-3px;right:-3px;font-size:10px;line-height:1;background:rgba(var(--b2),.95);
  border:1px solid rgba(var(--pc),.6);border-radius:9px;padding:2px 4px;font-style:normal;}
+.pp-fab i.pp-badge{background:rgba(var(--pc),.85);color:#fff;min-width:16px;text-align:center;font-size:9px;font-weight:700;padding:1px 4px;border-radius:8px;}
 .pp-fab u.pp-sync{position:absolute;bottom:-1px;left:-1px;width:8px;height:8px;border-radius:50%;
  border:1.5px solid rgba(var(--b2),.9);text-decoration:none;}
 .pp-fab u[data-sy="dirty"]{background:#d9a05a;}
@@ -121,6 +122,7 @@
 .pp-pk{border:1px solid rgba(var(--c2),.16);background:rgba(var(--c2),.05);color:rgba(var(--c2),.78);border-radius:10px;
  padding:6px 9px;font:600 10px -apple-system,sans-serif;cursor:pointer;}
 .pp-pk[data-on="1"]{border-color:rgba(var(--pc),.7);background:rgba(var(--pc),.18);color:rgba(var(--c2),.95);}
+.pp-em-pick{width:40px;height:40px;border:1px solid rgba(var(--c2),.16);background:rgba(var(--pc),.12);border-radius:10px;font-size:20px;cursor:pointer;margin-bottom:6px;}
 .pp-emo{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;}
 .pp-em{width:30px;height:30px;border:1px solid rgba(var(--c2),.14);background:rgba(var(--c2),.05);border-radius:9px;
  font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}
